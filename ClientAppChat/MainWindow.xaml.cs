@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Configuration;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -21,49 +22,56 @@ namespace ClientAppChat
     public partial class MainWindow : Window
     {
         IPEndPoint serverEndPoint;
+        NetworkStream ns = null;
         //const string serverAddress = "127.0.0.1";
         //const short serverPort = 4040;
-        UdpClient client ;
+        TcpClient client ;
         ObservableCollection<MessageInfo> messages = new ObservableCollection<MessageInfo>();   
         public MainWindow()
         {
             InitializeComponent();
             this.DataContext = messages;
-            client = new UdpClient();
+            client = new TcpClient();
             string address = ConfigurationManager.AppSettings["ServerAddress"]!;
             short port =short.Parse( ConfigurationManager.AppSettings["ServerPort"]!);
             serverEndPoint = new IPEndPoint(IPAddress.Parse(address), port);  
         }
 
-        private void LeaveBtnClick(object sender, RoutedEventArgs e)
+        private void DisconnectBtnClick(object sender, RoutedEventArgs e)
         {
-
+            ns.Close();
+            client.Close();
         }
 
-        private void JoinBtnClick(object sender, RoutedEventArgs e)
+        private void ConnectBtnClick(object sender, RoutedEventArgs e)
         {
-            string message = "$<join>";
-            SendMessage(message);
-            Listen();
+            try
+            {
+                client.Connect(serverEndPoint);
+                ns = client.GetStream();
+                Listen();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+                throw;
+            }
+           
         }
 
         private void SendBtnClick(object sender, RoutedEventArgs e)
         {           
             string message = msgText.Text;
-            SendMessage(message);
-            //MessageBox.Show("kkjsdhjsdg", "Error", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
-        }
-        private async void SendMessage(string message)
-        {
-            byte[] data = Encoding.UTF8.GetBytes(message);
-            await client.SendAsync(data, serverEndPoint);
+            StreamWriter writer = new StreamWriter(ns);
+            writer.WriteLine(message);
+
         }
         private async void Listen()
         {
+            StreamReader reader = new StreamReader(ns);
             while (true)
             {
-                var data = await client.ReceiveAsync();
-                string message = Encoding.UTF8.GetString(data.Buffer);
+                string? message = await reader.ReadLineAsync();
                 messages.Add(new MessageInfo(message, DateTime.Now));
             }
         }
